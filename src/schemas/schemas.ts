@@ -7,6 +7,12 @@ export const credentialsSchema = z.object({
     .min(6, "La contraseña debe tener al menos 6 caracteres"),
 });
 
+export const registrationSchema = credentialsSchema.extend({
+  nombre: z.string().trim().optional(),
+  apellido: z.string().trim().optional(),
+  matricula: z.string().trim().optional(),
+});
+
 export const studentSchema = z.object({
   nombre: z.string().trim().min(1, "El nombre es obligatorio"),
   apellido: z.string().trim().min(1, "El apellido es obligatorio"),
@@ -18,4 +24,5 @@ export const studentSchema = z.object({
 });
 
 export type Credentials = z.infer<typeof credentialsSchema>;
+export type RegistrationPayload = z.infer<typeof registrationSchema>;
 export type StudentPayload = z.infer<typeof studentSchema>;

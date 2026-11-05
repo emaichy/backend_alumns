@@ -1,13 +1,20 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { parseBody } from "../middleware/validate";
-import { credentialsSchema } from "../schemas/schemas";
+import { credentialsSchema, registrationSchema } from "../schemas/schemas";
 import type { AuthService } from "../services/authService";
 
 export function createAuthController(authService: AuthService) {
   const register = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password } = parseBody(credentialsSchema, req.body);
-    const user = await authService.register(email, password);
+    const { email, password, nombre, apellido, matricula } = parseBody(
+      registrationSchema,
+      req.body,
+    );
+    const user = await authService.register(email, password, {
+      nombre,
+      apellido,
+      matricula,
+    });
     res.status(201).json({ user });
   });
 
@@ -38,12 +45,8 @@ export function createAuthController(authService: AuthService) {
 
   const me = asyncHandler(async (req: Request, res: Response) => {
     const payload = req.auth!;
-    res.json({ 
-      data: {
-        id: parseInt(payload.sub),
-        email: payload.email,
-      }
-    });
+    const user = authService.getProfile(payload);
+    res.json({ user, claims: payload });
   });
 
   return { register, login, refresh, logout, me };

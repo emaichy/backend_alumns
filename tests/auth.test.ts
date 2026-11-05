@@ -13,9 +13,20 @@ describe("Autenticación", () => {
   it("registra un usuario nuevo (201)", async () => {
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ email: "ana@test.com", password: "secret123" });
+      .send({
+        nombre: "Ana",
+        apellido: "Pérez",
+        matricula: "A-001",
+        email: "ana@test.com",
+        password: "secret123",
+      });
     expect(res.status).toBe(201);
-    expect(res.body.user).toMatchObject({ email: "ana@test.com" });
+    expect(res.body.user).toMatchObject({
+      nombre: "Ana",
+      apellido: "Pérez",
+      matricula: "A-001",
+      email: "ana@test.com",
+    });
     expect(res.body.user.id).toBeTypeOf("number");
   });
 
@@ -51,7 +62,13 @@ describe("Autenticación", () => {
   it("devuelve el usuario y los claims del JWT autenticado", async () => {
     await request(app)
       .post("/api/auth/register")
-      .send({ email: "me@test.com", password: "secret123" });
+      .send({
+        nombre: "Mónica",
+        apellido: "López",
+        matricula: "M-001",
+        email: "me@test.com",
+        password: "secret123",
+      });
     const login = await request(app)
       .post("/api/auth/login")
       .send({ email: "me@test.com", password: "secret123" });
@@ -62,7 +79,13 @@ describe("Autenticación", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.user).toEqual({ id: 1, email: "me@test.com" });
+    expect(res.body.user).toEqual({
+      id: 1,
+      email: "me@test.com",
+      nombre: "Mónica",
+      apellido: "López",
+      matricula: "M-001",
+    });
     expect(res.body.claims).toMatchObject({
       sub: "1",
       email: "me@test.com",

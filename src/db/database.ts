@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  nombre        TEXT NOT NULL DEFAULT '',
+  apellido      TEXT NOT NULL DEFAULT '',
+  matricula     TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -55,6 +58,32 @@ export function createDatabase(location: string): AppDatabase {
   const db = new DatabaseSync(location);
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
+
+  const userCols = db
+    .prepare("PRAGMA table_info(users)")
+    .all() as unknown as Array<{ name: string }>;
+  for (const column of ["nombre", "apellido", "matricula"]) {
+    if (!userCols.some((col) => col.name === column)) {
+      db.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
+  db.exec(`
+    UPDATE users
+    SET nombre = COALESCE(
+          NULLIF(nombre, ''),
+          (SELECT nombre FROM students WHERE students.email = users.email)
+        ),
+        apellido = COALESCE(
+          NULLIF(apellido, ''),
+          (SELECT apellido FROM students WHERE students.email = users.email)
+        ),
+        matricula = COALESCE(
+          NULLIF(matricula, ''),
+          (SELECT matricula FROM students WHERE students.email = users.email)
+        )
+    WHERE EXISTS (SELECT 1 FROM students WHERE students.email = users.email)
+  `);
 
   // Migración: si una base existente aún no tiene la columna password_hash
   // (creada antes de este cambio), la agregamos.

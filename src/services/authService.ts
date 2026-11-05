@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { config } from "../config/env";
 import { conflict, unauthorized } from "../errors/httpError";
-import type { UserRepository } from "../repositories/userRepository";
+import type { UserRepository, UserProfile } from "../repositories/userRepository";
 import type { TokenRepository } from "../repositories/tokenRepository";
 import type { StudentRepository } from "../repositories/studentRepository";
 import type { RefreshTokenRepository } from "../repositories/refreshTokenRepository";
@@ -12,6 +12,9 @@ import type { RefreshTokenRepository } from "../repositories/refreshTokenReposit
 export interface PublicUser {
   id: number;
   email: string;
+  nombre?: string;
+  apellido?: string;
+  matricula?: string;
 }
 
 export interface TokenPayload {
@@ -20,6 +23,7 @@ export interface TokenPayload {
   jti: string;
   exp: number;
   iat: number;
+  kind: "user" | "student";
 }
 
 export interface AuthTokens {
@@ -38,13 +42,17 @@ export class AuthService {
     private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
-  async register(email: string, password: string): Promise<PublicUser> {
+  async register(
+    email: string,
+    password: string,
+    profile: UserProfile = {},
+  ): Promise<PublicUser> {
     if (this.users.findByEmail(email)) {
       throw conflict("Ya existe un usuario con ese correo electrónico");
     }
     const hash = await bcrypt.hash(password, config.bcryptRounds);
-    const user = this.users.create(email, hash);
-    return { id: user.id, email: user.email };
+    const user = this.users.create(email, hash, profile);
+    return this.toPublicUser(user);
   }
 
   async login(
@@ -56,13 +64,24 @@ export class AuthService {
     const user = this.users.findByEmail(email);
     const student = user ? undefined : this.students.findByEmail(email);
     const account = user
-      ? { id: user.id, email: user.email, hash: user.password_hash, kind: "user" as const }
+      ? {
+          id: user.id,
+          email: user.email,
+          hash: user.password_hash,
+          kind: "user" as const,
+          nombre: user.nombre,
+          apellido: user.apellido,
+          matricula: user.matricula,
+        }
       : student
         ? {
             id: student.id,
             email: student.email,
             hash: student.password_hash,
             kind: "student" as const,
+            nombre: student.nombre,
+            apellido: student.apellido,
+            matricula: student.matricula,
           }
         : undefined;
 
@@ -85,10 +104,54 @@ export class AuthService {
       this.refreshTokenExpiry,
     );
 
-    return { 
+    const matchingStudent = account.kind === "user"
+      ? this.students.findByEmail(account.email)
+      : undefined;
+    return {
       accessToken, 
       refreshToken: refreshTokenRecord.token, 
-      user: { id: account.id, email: account.email } 
+      user: this.toPublicUser({
+        id: account.id,
+        email: account.email,
+        nombre: account.nombre || matchingStudent?.nombre,
+        apellido: account.apellido || matchingStudent?.apellido,
+        matricula: account.matricula || matchingStudent?.matricula,
+      }),
+    };
+  }
+
+  getProfile(payload: TokenPayload): PublicUser {
+    const id = Number(payload.sub);
+    if (payload.kind === "student") {
+      const student = this.students.findById(id);
+      if (!student) throw unauthorized("Usuario no encontrado");
+      return this.toPublicUser(student);
+    }
+
+    const user = this.users.findById(id);
+    if (!user) throw unauthorized("Usuario no encontrado");
+    const matchingStudent = this.students.findByEmail(user.email);
+    return this.toPublicUser({
+      ...user,
+      nombre: user.nombre || matchingStudent?.nombre,
+      apellido: user.apellido || matchingStudent?.apellido,
+      matricula: user.matricula || matchingStudent?.matricula,
+    });
+  }
+
+  private toPublicUser(user: {
+    id: number;
+    email: string;
+    nombre?: string;
+    apellido?: string;
+    matricula?: string;
+  }): PublicUser {
+    return {
+      id: user.id,
+      email: user.email,
+      ...(user.nombre ? { nombre: user.nombre } : {}),
+      ...(user.apellido ? { apellido: user.apellido } : {}),
+      ...(user.matricula ? { matricula: user.matricula } : {}),
     };
   }
 
