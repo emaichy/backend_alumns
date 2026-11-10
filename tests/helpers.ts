@@ -18,5 +18,5 @@ export async function authenticate(
   const res = await request(app)
     .post("/api/auth/login")
     .send({ email, password });
-  return res.body.token as string;
+  return res.body.accessToken as string;
 }

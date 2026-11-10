@@ -78,6 +78,21 @@ describe("CRUD de estudiantes (protegido)", () => {
     expect(res.body.data.apellido).toBe("García");
   });
 
+  it("actualiza un estudiante sin cambiar su contraseña", async () => {
+    const created = await auth(request(app).post("/api/students")).send(sample);
+    const id = created.body.data.id as number;
+    const { password: _password, ...studentData } = sample;
+
+    const res = await auth(request(app).put(`/api/students/${id}`)).send({
+      ...studentData,
+      apellido: "García",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.apellido).toBe("García");
+    expect(res.body.data.password).toBeUndefined();
+  });
+
   it("elimina un estudiante (204) y luego 404", async () => {
     const created = await auth(request(app).post("/api/students")).send(sample);
     const id = created.body.data.id as number;

@@ -63,7 +63,7 @@ export class RefreshTokenRepository {
       WHERE user_id = ? AND user_kind = ?
     `);
     const result = stmt.run(userId, userKind);
-    return result.changes;
+    return Number(result.changes);
   }
 
   /**
@@ -73,7 +73,7 @@ export class RefreshTokenRepository {
     const now = Math.floor(Date.now() / 1000);
     const stmt = this.db.prepare("DELETE FROM refresh_tokens WHERE expires_at < ?");
     const result = stmt.run(now);
-    return result.changes;
+    return Number(result.changes);
   }
 
   /**

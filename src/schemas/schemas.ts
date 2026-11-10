@@ -23,6 +23,11 @@ export const studentSchema = z.object({
     .min(6, "La contraseña debe tener al menos 6 caracteres"),
 });
 
+export const studentUpdateSchema = studentSchema.extend({
+  password: studentSchema.shape.password.optional(),
+});
+
 export type Credentials = z.infer<typeof credentialsSchema>;
 export type RegistrationPayload = z.infer<typeof registrationSchema>;
 export type StudentPayload = z.infer<typeof studentSchema>;
+export type StudentUpdatePayload = z.infer<typeof studentUpdateSchema>;

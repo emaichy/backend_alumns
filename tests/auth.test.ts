@@ -56,7 +56,8 @@ describe("Autenticación", () => {
       .post("/api/auth/login")
       .send({ email: "log@test.com", password: "secret123" });
     expect(res.status).toBe(200);
-    expect(res.body.token).toBeTypeOf("string");
+    expect(res.body.accessToken).toBeTypeOf("string");
+    expect(res.body.refreshToken).toBeTypeOf("string");
   });
 
   it("devuelve el usuario y los claims del JWT autenticado", async () => {
@@ -72,7 +73,7 @@ describe("Autenticación", () => {
     const login = await request(app)
       .post("/api/auth/login")
       .send({ email: "me@test.com", password: "secret123" });
-    const token = login.body.token as string;
+    const token = login.body.accessToken as string;
 
     const res = await request(app)
       .get("/api/auth/me")
@@ -117,16 +118,23 @@ describe("Autenticación", () => {
     const login = await request(app)
       .post("/api/auth/login")
       .send({ email: "out@test.com", password: "secret123" });
-    const token = login.body.token as string;
+    const token = login.body.accessToken as string;
+    const refreshToken = login.body.refreshToken as string;
 
     const logout = await request(app)
       .post("/api/auth/logout")
-      .set("Authorization", `Bearer ${token}`);
+      .set("Authorization", `Bearer ${token}`)
+      .send({ refreshToken });
     expect(logout.status).toBe(200);
 
     const after = await request(app)
       .get("/api/students")
       .set("Authorization", `Bearer ${token}`);
     expect(after.status).toBe(401);
+
+    const refresh = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken });
+    expect(refresh.status).toBe(401);
   });
 });

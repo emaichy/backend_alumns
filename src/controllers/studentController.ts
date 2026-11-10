@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { parseBody } from "../middleware/validate";
 import { badRequest, notFound } from "../errors/httpError";
-import { studentSchema } from "../schemas/schemas";
+import { studentSchema, studentUpdateSchema } from "../schemas/schemas";
 import {
   toPublicStudent,
   type StudentInput,
@@ -51,8 +51,19 @@ export function createStudentController(students: StudentRepository) {
 
   const update = asyncHandler(async (req: Request, res: Response) => {
     const id = parseId(req.params.id);
-    if (!students.findById(id)) throw notFound("Estudiante no encontrado");
-    const input = await toInput(req.body);
+    const existing = students.findById(id);
+    if (!existing) throw notFound("Estudiante no encontrado");
+    const data = parseBody(studentUpdateSchema, req.body);
+    const passwordHash = data.password
+      ? await bcrypt.hash(data.password, config.bcryptRounds)
+      : existing.password_hash;
+    const input: StudentInput = {
+      nombre: data.nombre,
+      apellido: data.apellido,
+      matricula: data.matricula,
+      email: data.email,
+      passwordHash,
+    };
     res.json({ data: toPublicStudent(students.update(id, input)) });
   });
 
