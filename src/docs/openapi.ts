@@ -15,6 +15,8 @@ export const openapiSpec = {
   tags: [
     { name: "Auth", description: "Registro, inicio y cierre de sesión" },
     { name: "Estudiantes", description: "CRUD de estudiantes (requiere token)" },
+    { name: "Usuarios", description: "Gestión de usuarios (requiere rol maestro)" },
+    { name: "Roles", description: "Consulta y administración de roles" },
     { name: "Sistema", description: "Estado del servicio" },
   ],
   components: {
@@ -40,6 +42,71 @@ export const openapiSpec = {
         properties: {
           id: { type: "integer", example: 1 },
           email: { type: "string", format: "email", example: "ana@test.com" },
+          nombre: { type: "string", example: "Ana" },
+          apellido: { type: "string", example: "García" },
+          apellido_paterno: { type: "string", example: "García" },
+          apellido_materno: { type: "string", nullable: true },
+          matricula: { type: "string", nullable: true },
+          rol_nombre: { type: "string", example: "estudiante" },
+        },
+      },
+      UsuarioRegistration: {
+        type: "object",
+        required: ["nombre", "apellido_paterno", "email", "password", "rol_id"],
+        properties: {
+          nombre: { type: "string", example: "Ana" },
+          apellido_paterno: { type: "string", example: "García" },
+          apellido_materno: { type: "string", example: "López" },
+          email: { type: "string", format: "email", example: "ana@test.com" },
+          password: { type: "string", minLength: 6 },
+          rol_id: { type: "integer", example: 1, description: "El registro público solo permite el rol estudiante." },
+          matricula: { type: "string", example: "EST001" },
+        },
+      },
+      Usuario: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          nombre: { type: "string", example: "Ana" },
+          apellido_paterno: { type: "string", example: "García" },
+          apellido_materno: { type: "string", nullable: true },
+          email: { type: "string", format: "email" },
+          rol_id: { type: "integer", example: 1 },
+          rol_nombre: { type: "string", example: "estudiante" },
+          matricula: { type: "string", nullable: true },
+          activo: { type: "integer", enum: [0, 1] },
+        },
+      },
+      UsuarioUpdate: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" },
+          apellido_paterno: { type: "string" },
+          apellido_materno: { type: "string", nullable: true },
+          email: { type: "string", format: "email" },
+          password: { type: "string", minLength: 6 },
+          rol_id: { type: "integer" },
+          matricula: { type: "string", nullable: true },
+          activo: { type: "boolean" },
+        },
+      },
+      ProfileUpdate: {
+        type: "object",
+        description: "Actualiza únicamente los datos personales del usuario autenticado.",
+        properties: {
+          nombre: { type: "string", minLength: 1 },
+          apellido: { type: "string", minLength: 1, description: "Para cuentas antiguas y estudiantes." },
+          apellido_paterno: { type: "string", minLength: 1, description: "Para usuarios con roles." },
+          apellido_materno: { type: "string", nullable: true, description: "Para usuarios con roles." },
+        },
+        minProperties: 1,
+      },
+      Rol: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          nombre: { type: "string", example: "estudiante" },
+          descripcion: { type: "string", nullable: true },
         },
       },
       LoginResponse: {
@@ -126,13 +193,19 @@ export const openapiSpec = {
     "/api/auth/register": {
       post: {
         tags: ["Auth"],
-        summary: "Registrar un usuario",
+        summary: "Registrar una cuenta",
+        description: "Acepta el registro tradicional o un usuario con rol estudiante.",
         security: [],
         requestBody: {
           required: true,
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/Credentials" },
+              schema: {
+                oneOf: [
+                  { $ref: "#/components/schemas/Credentials" },
+                  { $ref: "#/components/schemas/UsuarioRegistration" },
+                ],
+              },
             },
           },
         },
@@ -245,6 +318,35 @@ export const openapiSpec = {
               },
             },
           },
+          "401": { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      put: {
+        tags: ["Auth"],
+        summary: "Actualizar el perfil del usuario autenticado",
+        description: "Solo permite cambiar el nombre y los apellidos de la propia cuenta. El formato de apellido depende del tipo de cuenta.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ProfileUpdate" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Perfil actualizado",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { user: { $ref: "#/components/schemas/PublicUser" } },
+                },
+              },
+            },
+          },
+          "400": { description: "Datos inválidos", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "401": { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
@@ -363,6 +465,170 @@ export const openapiSpec = {
           "401": { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "No encontrado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
+      },
+    },
+    "/api/usuarios": {
+      get: {
+        tags: ["Usuarios"],
+        summary: "Listar usuarios",
+        description: "Requiere el rol maestro. Acepta filtros rol, search y activo.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Lista de usuarios sin contraseñas",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/Usuario" } },
+              },
+            },
+          },
+          "403": { description: "Se requiere el rol maestro" },
+        },
+      },
+      post: {
+        tags: ["Usuarios"],
+        summary: "Crear usuario",
+        description: "Requiere el rol maestro.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UsuarioRegistration" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Usuario creado" },
+          "400": { description: "Datos inválidos" },
+          "409": { description: "Correo o matrícula duplicados" },
+        },
+      },
+    },
+    "/api/usuarios/{id}": {
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "integer" } },
+      ],
+      get: {
+        tags: ["Usuarios"],
+        summary: "Obtener usuario",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Usuario encontrado" }, "404": { description: "No encontrado" } },
+      },
+      put: {
+        tags: ["Usuarios"],
+        summary: "Actualizar usuario",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/UsuarioUpdate" } } },
+        },
+        responses: { "200": { description: "Usuario actualizado" }, "404": { description: "No encontrado" } },
+      },
+      delete: {
+        tags: ["Usuarios"],
+        summary: "Eliminar usuario",
+        security: [{ bearerAuth: [] }],
+        responses: { "204": { description: "Eliminado" }, "404": { description: "No encontrado" } },
+      },
+    },
+    "/api/usuarios/{id}/activar": {
+      patch: {
+        tags: ["Usuarios"],
+        summary: "Activar o desactivar usuario",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "integer" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["activo"],
+                properties: { activo: { type: "boolean" } },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Estado actualizado" }, "404": { description: "No encontrado" } },
+      },
+    },
+    "/api/roles": {
+      get: {
+        tags: ["Roles"],
+        summary: "Listar roles",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Lista de roles",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/Rol" } },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Roles"],
+        summary: "Crear rol (maestro)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["nombre"],
+                properties: {
+                  nombre: { type: "string" },
+                  descripcion: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Rol creado" }, "403": { description: "Se requiere el rol maestro" } },
+      },
+    },
+    "/api/roles/{id}": {
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "integer" } },
+      ],
+      get: {
+        tags: ["Roles"],
+        summary: "Obtener rol",
+        security: [{ bearerAuth: [] }],
+        responses: { "200": { description: "Rol encontrado" }, "404": { description: "No encontrado" } },
+      },
+      put: {
+        tags: ["Roles"],
+        summary: "Actualizar rol (maestro)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["nombre"],
+                properties: {
+                  nombre: { type: "string" },
+                  descripcion: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Rol actualizado" }, "409": { description: "Rol protegido o nombre duplicado" } },
+      },
+      delete: {
+        tags: ["Roles"],
+        summary: "Eliminar rol (maestro)",
+        security: [{ bearerAuth: [] }],
+        responses: { "204": { description: "Eliminado" }, "409": { description: "Rol predeterminado o asignado a usuarios" } },
       },
     },
   },

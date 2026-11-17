@@ -14,8 +14,12 @@ export function errorHandler(
   }
 
   if (err instanceof Error && /UNIQUE constraint failed/i.test(err.message)) {
-    const field = /students\.(\w+)|users\.(\w+)/.exec(err.message);
-    const name = field ? (field[1] ?? field[2]) : "campo";
+    const field = /students\.(\w+)|users\.(\w+)|usuarios\.(\w+)|roles\.(\w+)/.exec(
+      err.message,
+    );
+    const name = field
+      ? (field[1] ?? field[2] ?? field[3] ?? field[4])
+      : "campo";
     res.status(409).json({ error: `Ya existe un registro con ese ${name}` });
     return;
   }

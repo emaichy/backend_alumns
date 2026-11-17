@@ -10,4 +10,6 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h",
   dbPath: process.env.DB_PATH ?? path.resolve(__dirname, "../../data/app.db"),
   bcryptRounds: 10,
+  bootstrapMasterEmail: process.env.BOOTSTRAP_MASTER_EMAIL,
+  bootstrapMasterPassword: process.env.BOOTSTRAP_MASTER_PASSWORD,
 } as const;

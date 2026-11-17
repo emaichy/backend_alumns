@@ -35,5 +35,11 @@ export function createAuthRouter(
     controller.me,
   );
 
+  router.put(
+    "/me",
+    requireAuth(authService),
+    controller.updateMe,
+  );
+
   return router;
 }

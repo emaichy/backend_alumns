@@ -48,6 +48,32 @@ export class StudentRepository {
       .get(email) as StudentRow | undefined;
   }
 
+  updateProfile(
+    id: number,
+    profile: Partial<Pick<StudentRow, "nombre" | "apellido">>,
+  ): StudentRow | undefined {
+    const fields: string[] = [];
+    const values: string[] = [];
+
+    if (profile.nombre !== undefined) {
+      fields.push("nombre = ?");
+      values.push(profile.nombre);
+    }
+    if (profile.apellido !== undefined) {
+      fields.push("apellido = ?");
+      values.push(profile.apellido);
+    }
+    if (fields.length === 0) return this.findById(id);
+
+    values.push(String(id));
+    this.db
+      .prepare(
+        `UPDATE students SET ${fields.join(", ")}, updated_at = datetime('now') WHERE id = ?`,
+      )
+      .run(...values);
+    return this.findById(id);
+  }
+
   create(input: StudentInput): StudentRow {
     const stmt = this.db.prepare(
       `INSERT INTO students (nombre, apellido, matricula, email, password_hash)

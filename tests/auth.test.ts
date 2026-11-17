@@ -101,6 +101,72 @@ describe("Autenticación", () => {
     );
   });
 
+  it("permite que el usuario autenticado actualice sus propios datos personales", async () => {
+    await request(app).post("/api/auth/register").send({
+      nombre: "Mónica",
+      apellido: "López",
+      matricula: "M-001",
+      email: "profile@test.com",
+      password: "secret123",
+    });
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "profile@test.com", password: "secret123" });
+    const token = login.body.accessToken as string;
+
+    const update = await request(app)
+      .put("/api/auth/me")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ nombre: "María", apellido: "Pérez" });
+
+    expect(update.status).toBe(200);
+    expect(update.body.user).toMatchObject({
+      nombre: "María",
+      apellido: "Pérez",
+      email: "profile@test.com",
+    });
+
+    const profile = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${token}`);
+    expect(profile.body.user).toMatchObject({
+      nombre: "María",
+      apellido: "Pérez",
+    });
+  });
+
+  it("permite actualizar apellidos de una cuenta con roles y requiere autenticación", async () => {
+    await request(app).post("/api/auth/register").send({
+      nombre: "Ana",
+      apellido_paterno: "García",
+      apellido_materno: "López",
+      email: "role-profile@test.com",
+      password: "secret123",
+      rol_id: 1,
+    });
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "role-profile@test.com", password: "secret123" });
+    const token = login.body.accessToken as string;
+
+    const update = await request(app)
+      .put("/api/auth/me")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ nombre: "Ana María", apellido_paterno: "Gómez", apellido_materno: null });
+    expect(update.status).toBe(200);
+    expect(update.body.user).toMatchObject({
+      nombre: "Ana María",
+      apellido_paterno: "Gómez",
+      apellido_materno: null,
+      rol_nombre: "estudiante",
+    });
+
+    const unauthorized = await request(app)
+      .put("/api/auth/me")
+      .send({ nombre: "No autorizado" });
+    expect(unauthorized.status).toBe(401);
+  });
+
   it("rechaza credenciales incorrectas (401)", async () => {
     await request(app)
       .post("/api/auth/register")

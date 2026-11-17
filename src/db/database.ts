@@ -15,6 +15,28 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS roles (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre      TEXT NOT NULL UNIQUE,
+  descripcion TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS usuarios (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre           TEXT NOT NULL,
+  apellido_paterno TEXT NOT NULL,
+  apellido_materno TEXT,
+  email            TEXT NOT NULL UNIQUE,
+  password_hash    TEXT NOT NULL,
+  rol_id           INTEGER NOT NULL,
+  matricula        TEXT UNIQUE,
+  activo           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE RESTRICT
+);
+
 CREATE TABLE IF NOT EXISTS students (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre        TEXT NOT NULL,
@@ -35,15 +57,18 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL,
   user_kind  TEXT NOT NULL CHECK (user_kind IN ('user', 'student')),
+  usuario_id INTEGER,
   token      TEXT NOT NULL UNIQUE,
   expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
-
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id, user_kind);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);
+CREATE INDEX IF NOT EXISTS idx_usuarios_rol ON usuarios(rol_id);
+CREATE INDEX IF NOT EXISTS idx_usuarios_matricula ON usuarios(matricula);
 `;
 
 /**
@@ -58,6 +83,23 @@ export function createDatabase(location: string): AppDatabase {
   const db = new DatabaseSync(location);
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
+
+  const refreshTokenCols = db
+    .prepare("PRAGMA table_info(refresh_tokens)")
+    .all() as Array<{ name: string }>;
+  if (!refreshTokenCols.some((column) => column.name === "usuario_id")) {
+    db.exec("ALTER TABLE refresh_tokens ADD COLUMN usuario_id INTEGER");
+  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_usuario ON refresh_tokens(usuario_id)",
+  );
+
+  db.prepare(
+    "INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES (?, ?)",
+  ).run("estudiante", "Rol de estudiante");
+  db.prepare(
+    "INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES (?, ?)",
+  ).run("maestro", "Rol de maestro");
 
   const userCols = db
     .prepare("PRAGMA table_info(users)")
@@ -96,13 +138,54 @@ export function createDatabase(location: string): AppDatabase {
     );
   }
 
-  // Crear índices si no existen (para bases existentes)
-  try {
-    db.exec("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id, user_kind)");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token)");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at)");
-  } catch {
-    // Los índices ya existen o la tabla aún no se crea
+  const studentRole = db
+    .prepare("SELECT id FROM roles WHERE nombre = ?")
+    .get("estudiante") as { id: number };
+  const userRows = db
+    .prepare("SELECT id, email, password_hash, nombre, apellido, matricula FROM users")
+    .all() as Array<{
+      id: number;
+      email: string;
+      password_hash: string;
+      nombre: string;
+      apellido: string;
+      matricula: string;
+    }>;
+  const insertUsuario = db.prepare(`
+    INSERT OR IGNORE INTO usuarios
+      (nombre, apellido_paterno, email, password_hash, rol_id, matricula)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const user of userRows) {
+    insertUsuario.run(
+      user.nombre || "Usuario",
+      user.apellido || "Migrado",
+      user.email,
+      user.password_hash,
+      studentRole.id,
+      user.matricula || null,
+    );
+  }
+
+  const studentRows = db
+    .prepare("SELECT nombre, apellido, matricula, email, password_hash FROM students")
+    .all() as Array<{
+      nombre: string;
+      apellido: string;
+      matricula: string;
+      email: string;
+      password_hash: string;
+    }>;
+  for (const student of studentRows) {
+    insertUsuario.run(
+      student.nombre,
+      student.apellido,
+      student.email,
+      student.password_hash,
+      studentRole.id,
+      student.matricula || null,
+    );
   }
 
   return db;

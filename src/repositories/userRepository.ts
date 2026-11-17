@@ -45,4 +45,28 @@ export class UserRepository {
       .prepare("SELECT * FROM users WHERE id = ?")
       .get(id) as UserRow | undefined;
   }
+
+  updateProfile(
+    id: number,
+    profile: Partial<Pick<UserProfile, "nombre" | "apellido">>,
+  ): UserRow | undefined {
+    const fields: string[] = [];
+    const values: string[] = [];
+
+    if (profile.nombre !== undefined) {
+      fields.push("nombre = ?");
+      values.push(profile.nombre);
+    }
+    if (profile.apellido !== undefined) {
+      fields.push("apellido = ?");
+      values.push(profile.apellido);
+    }
+    if (fields.length === 0) return this.findById(id);
+
+    values.push(String(id));
+    this.db
+      .prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`)
+      .run(...values);
+    return this.findById(id);
+  }
 }
